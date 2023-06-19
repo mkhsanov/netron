@@ -63,23 +63,37 @@ hailo.Graph = class {
         for (const layer of layers) {
             switch (layer.type) {
                 case 'input_layer': {
-                    for (let i = 0; i < layer.output.length; i++) {
-                        const shape = layer.output_shapes ? layer.output_shapes[i] : null;
-                        const type = shape ? new hailo.TensorType('?', new hailo.TensorShape()) : null;
-                        const argument = new hailo.Argument(layer.name, type);
-                        const parameter = new hailo.Parameter('input', true, [ argument ]);
-                        this._inputs.push(parameter);
-                    }
+                    const { name, output_shapes: [output_shape] = [] } = layer;
+                    const type = output_shape ? new hailo.TensorType('?', new hailo.TensorShape()) : null;
+                    const parameter = new hailo.Parameter(name, true, [
+                        new hailo.Argument(name, new hailo.TensorType(type, new hailo.TensorShape(output_shape)))
+                    ]);
+                    this._inputs.push(parameter);
+
                     break;
                 }
+
+                case 'const_input': {
+                    const { name, output_shapes: [output_shape] = [] } = layer;
+                    const type = output_shape ? new hailo.TensorType('?', new hailo.TensorShape()) : null;
+                    const parameter = new hailo.Parameter(name, true, [
+                        new hailo.Argument(name, new hailo.TensorType(type, new hailo.TensorShape(output_shape)))
+                    ]);
+                    this._inputs.push(parameter);
+
+                    break;
+                }
+
                 case 'output_layer': {
-                    for (let i = 0; i < layer.input.length; i++) {
-                        const shape = layer.input_shapes ? layer.input_shapes[i] : null;
-                        const type = shape ? new hailo.TensorType('?', new hailo.TensorShape()) : null;
-                        const argument = new hailo.Argument(layer.input[i], type);
-                        const parameter = new hailo.Parameter('output', true, [ argument ]);
+                    const { name, input, input_shapes: [input_shape] = [] } = layer;
+                    for (let j = 0; j < input.length; j++) {
+                        const type = input_shape ? new hailo.TensorType('?', new hailo.TensorShape()) : null;
+                        const parameter = new hailo.Parameter(name, true, [
+                            new hailo.Argument(input[j], new hailo.TensorType(type, new hailo.TensorShape(input_shape)))
+                        ]);
                         this._outputs.push(parameter);
                     }
+
                     break;
                 }
                 default: {
@@ -340,9 +354,11 @@ hailo.Container = class {
                 break;
             }
             case 'har': {
-                const read = (name) => {
-                    const entries = context.entries('tar');
-                    const stream = entries.get(name);
+                const read = () => {
+                    const entries = [...context.entries('tar')];
+                    const regExp = new RegExp(`hn`);
+                    const searchResult = entries.find(([name]) => regExp.test(name));
+                    const [, stream] = searchResult;
                     if (stream) {
                         try {
                             const buffer = stream.peek();
